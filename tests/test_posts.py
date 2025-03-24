@@ -1,9 +1,9 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.config import Config
-from app.models import Base, get_all_posts, get_post_by_id, update_post, delete_post
-from .app import app
+from DevOpsBackend.app.config import Config
+from DevOpsBackend.app.models import Base, get_all_posts, get_post_by_id, update_post, delete_post
+from DevOpsBackend..app import app
 from fastapi.testclient import TestClient
 import os
 
