@@ -1,6 +1,11 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from .config import Config
+
+class Config:
+    SQLALCHEMY_DATABASE_URI = os.getenv("SQLALCHEMY_DATABASE_URI")
+    SQLALCHEMY_TEST_DATABASE_URI = os.getenv("SQLALCHEMY_TEST_DATABASE_URI")
+    SECRET_KEY = os.getenv("SECRET_KEY")
 
 # Строка подключения к БД PostgreSQL
 SQLALCHEMY_DATABASE_URL = Config.SQLALCHEMY_DATABASE_URI
