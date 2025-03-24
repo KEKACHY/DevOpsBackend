@@ -36,22 +36,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install PostgreSQL client
-        run: sudo apt-get install -y postgresql-client
-
-      - name: Set up Python
+      - name: Set up Python 3.9
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
       - name: Install dependencies
         run: |
-          pip install -e .
-          pip install pytest psycopg2-binary
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Run tests
-        env:
-          SQLALCHEMY_DATABASE_URI: ${{ secrets.SQLALCHEMY_DATABASE_URI }}  # Только основная БД
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
         run: |
           PYTHONPATH=. pytest tests/ -v --disable-warnings
