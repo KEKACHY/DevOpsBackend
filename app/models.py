@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from config import SessionLocal
+from .config import SessionLocal
 
 # Получаем сессию для работы с БД
 def get_db():
