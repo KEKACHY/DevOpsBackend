@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from test_config import TestConfig
-from models import Base, get_all_posts, get_post_by_id, update_post, delete_post
+from app.models import Base, get_all_posts, get_post_by_id, update_post, delete_post
 from app import appЕ
 from fastapi.testclient import TestClient
 import os
