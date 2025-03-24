@@ -29,30 +29,29 @@ jobs:
         run: |
           echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> $GITHUB_ENV
           echo "SQLALCHEMY_DATABASE_URI=${{ secrets.SQLALCHEMY_DATABASE_URI }}" >> $GITHUB_ENV
-          echo "SQLALCHEMY_TEST_DATABASE_URI=${{ secrets.SQLALCHEMY_TEST_DATABASE_URI }}" >> $GITHUB_ENV
 
   test:
     runs-on: ubuntu-latest
     needs: build
-    env:
-      # Переиспользуем переменные из build
-      SECRET_KEY: ${{ secrets.SECRET_KEY }}
-      SQLALCHEMY_TEST_DATABASE_URI: ${{ secrets.SQLALCHEMY_TEST_DATABASE_URI }}
-
     steps:
-      - name: Check out code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+      
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
+          pip install -e .
+          pip install pytest psycopg2-binary
 
       - name: Run tests
+        env:
+          SQLALCHEMY_DATABASE_URI: ${{ secrets.SQLALCHEMY_DATABASE_URI }}  # Только основная БД
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
         run: |
-          PYTHONPATH=$PYTHONPATH:. pytest tests/ --cov=DevOpsBackend --cov-report=xml -v --disable-warnings
+          PYTHONPATH=. pytest tests/ -v --disable-warnings
