@@ -51,13 +51,8 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          # Устанавливаем pytest, если его нет в requirements.txt
           pip install pytest pytest-cov
 
       - name: Run tests
         run: |
-          # Явно указываем PYTHONPATH для корректных импортов
-          PYTHONPATH=$PYTHONPATH:. pytest tests/ \
-            --cov=DevOpsBackend \
-            --cov-report=xml \
-            --disable
+          PYTHONPATH=$PYTHONPATH:. pytest tests/ --cov=DevOpsBackend --cov-report=xml -v --disable-warnings
