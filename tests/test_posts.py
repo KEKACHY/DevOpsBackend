@@ -1,15 +1,15 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from test_config import TestConfig
-from app.models import Base, get_all_posts, get_post_by_id, update_post, delete_post
-from app import appЕ
+from .config import Config
+from .models import Base, get_all_posts, get_post_by_id, update_post, delete_post
+from .app import app
 from fastapi.testclient import TestClient
 import os
 
 # Устанавливаем конфигурацию для тестов
-os.environ["SQLALCHEMY_DATABASE_URI"] = TestConfig.SQLALCHEMY_TEST_DATABASE_URI
-os.environ["SECRET_KEY"] = TestConfig.SECRET_KEY
+os.environ["SQLALCHEMY_DATABASE_URI"] = Config.SQLALCHEMY_TEST_DATABASE_URI
+os.environ["SECRET_KEY"] = Config.SECRET_KEY
 
 # Настроим базу данных для тестов
 DATABASE_URL = os.getenv("SQLALCHEMY_TEST_DATABASE_URI")
