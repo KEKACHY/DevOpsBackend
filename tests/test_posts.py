@@ -2,7 +2,7 @@ import pytest
 import uuid
 from fastapi.testclient import TestClient
 from app.main import app
-from app.test_config import engine, SessionLocal
+from app.config import engine, SessionLocal
 from sqlalchemy import text
 
 test_client = TestClient(app)

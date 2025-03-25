@@ -47,7 +47,7 @@ jobs:
 
       - name: Run tests
         env:
-          SQLALCHEMY_DATABASE_TEST_URI: ${{ secrets.SQLALCHEMY_DATABASE_TEST_URI }}
+          SQLALCHEMY_DATABASE_URI: ${{ secrets.SQLALCHEMY_DATABASE_TEST_URI }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
         run: |
           PYTHONPATH=. pytest tests/ -v --disable-warnings
