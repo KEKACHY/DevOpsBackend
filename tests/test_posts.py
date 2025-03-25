@@ -1,19 +1,19 @@
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from DevOpsBackend.app.config import Config
-from DevOpsBackend.app.models import get_all_posts, get_post_by_id, update_post, delete_post
-from fastapi.testclient import TestClient
-from DevOpsBackend.app.main import app
 import os
 import uuid
+from fastapi.testclient import TestClient
 
-# Генерируем уникальное имя для тестовой БД
+# Импорты из вашего приложения
+from app.config import Config
+from app.models import get_all_posts, get_post_by_id, update_post, delete_post
+from app.main import app
+
 TEST_DB_NAME = f"test_db_{uuid.uuid4().hex[:8]}"
 MASTER_DB_URI = Config.SQLALCHEMY_DATABASE_URI
 TEST_DB_URI = Config.SQLALCHEMY_DATABASE_URI.rsplit('/', 1)[0] + f"/{TEST_DB_NAME}"
 
-# Тестовые данные
 TEST_POST = {
     "rutracker_id": "test_id_123",
     "link": "http://test.example.com",
@@ -23,16 +23,17 @@ TEST_POST = {
     "size": "1.2GB"
 }
 
-# ----- Фикстуры для управления тестовой БД -----
 @pytest.fixture(scope="session", autouse=True)
 def create_test_database():
     master_engine = None
     try:
         master_engine = create_engine(MASTER_DB_URI, isolation_level="AUTOCOMMIT")
         with master_engine.connect() as conn:
-            conn.execute(text(f"CREATE DATABASE {TEST_DB_NAME} WITH TEMPLATE {MASTER_DB_URI.split('/')[-1]}"))
+            conn.execute(text(f"CREATE DATABASE {TEST_DB_NAME}"))
         
         engine = create_engine(TEST_DB_URI)
+        # Создаем таблицы (если используете SQLAlchemy ORM)
+        # Base.metadata.create_all(engine)
         yield
         
     finally:
@@ -44,7 +45,6 @@ def create_test_database():
 
 @pytest.fixture
 def db_session():
-    """Изолированная сессия для каждого теста с откатом изменений"""
     engine = create_engine(TEST_DB_URI)
     connection = engine.connect()
     transaction = connection.begin()
@@ -59,13 +59,11 @@ def db_session():
 
 @pytest.fixture
 def client():
-    """Тестовый клиент FastAPI"""
     with TestClient(app) as client:
         yield client
 
 @pytest.fixture
 def test_post_id(db_session):
-    """Создает тестовый пост и возвращает его ID"""
     result = db_session.execute(text("""
         INSERT INTO rutracker_posts 
         (rutracker_id, link, title, seeds, leaches, size) 
