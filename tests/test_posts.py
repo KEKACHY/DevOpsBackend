@@ -1,10 +1,10 @@
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from config import Config
-from models import get_all_posts, get_post_by_id, update_post, delete_post
+from DevOpsBackend.app.config import Config
+from DevOpsBackend.app.models import get_all_posts, get_post_by_id, update_post, delete_post
 from fastapi.testclient import TestClient
-from main import app
+from DevOpsBackend.app.main import app
 import os
 import uuid
 
