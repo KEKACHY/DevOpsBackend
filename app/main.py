@@ -51,8 +51,10 @@ def get_post(post_id: int, db: Session = Depends(get_db)):
 @app.post("/posts/", response_model=RutrackerPostResponse, status_code=201)
 def create_post(post: RutrackerPostCreate, db: Session = Depends(get_db)):
     post_id = models.create_post(db, **post.dict())
+    db.commit() 
     
     if not post_id:
+        db.rollback()  # Откатываем в случае ошибки
         raise HTTPException(status_code=500, detail="Failed to create or retrieve post")
     
     created_post = models.get_post_by_id(db, post_id)
@@ -62,8 +64,10 @@ def create_post(post: RutrackerPostCreate, db: Session = Depends(get_db)):
 @app.put("/posts/{post_id}", response_model=RutrackerPostResponse)
 def update_post(post_id: int, post: RutrackerPostCreate, db: Session = Depends(get_db)):
     models.update_post(db, post_id, **post.dict())
+    db.commit() 
     updated_post = models.get_post_by_id(db, post_id)
     return updated_post
+
 
 # Маршрут для удаления поста
 @app.delete("/posts/{post_id}", response_model=PostDeleteResponse)
@@ -72,9 +76,8 @@ def delete_post(post_id: int, db: Session = Depends(get_db)):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     
-    # Удаляем пост
     models.delete_post(db, post_id)
+    db.commit() 
     
-    # Возвращаем только ID удалённого поста
     return {"id": post_id}
 

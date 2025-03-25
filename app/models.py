@@ -37,7 +37,6 @@ def create_post(db, rutracker_id, link, title, seeds, leaches, size):
         {"rutracker_id": rutracker_id, "link": link, "title": title, 
          "seeds": seeds, "leaches": leaches, "size": size}
     )
-    db.commit()
     return result.fetchone()[0] 
 
 # Функция для обновления поста
@@ -47,7 +46,6 @@ def update_post(db, post_id, rutracker_id, link, title, seeds, leaches, size):
         {"post_id": post_id, "rutracker_id": rutracker_id, "link": link,
          "title": title, "seeds": seeds, "leaches": leaches, "size": size}
     )
-    db.commit()
 
 # Функция для удаления поста
 def delete_post(db: Session, post_id: int):
@@ -55,4 +53,3 @@ def delete_post(db: Session, post_id: int):
         text("SELECT delete_post(:post_id)"),
         {"post_id": post_id}
     )
-    db.commit()
