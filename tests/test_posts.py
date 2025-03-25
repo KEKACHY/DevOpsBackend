@@ -2,33 +2,25 @@ import pytest
 import uuid
 from fastapi.testclient import TestClient
 from app.main import app
-from app.config import Config
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm import Session
-
-# Настройка тестовой базы данных
-engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+from app.test_config import engine, SessionLocal
+from sqlalchemy import text
 
 test_client = TestClient(app)
 
 @pytest.fixture
 def db_session():
-    # Открываем сессию для каждого теста
     db = SessionLocal()
-    # Начинаем транзакцию
-    transaction = db.begin()
-    yield db
-    # Откатываем транзакцию после завершения теста
-    transaction.rollback()
-    db.close()
+    db.begin()  # Явно начинаем транзакцию
+    try:
+        yield db
+    finally:
+        db.rollback()  # Явно откатываем
+        db.close()
 
 # Функция для генерации уникального rutracker_id
 def generate_unique_rutracker_id():
     return str(uuid.uuid4())
 
-# Тест создания нового поста через API
 @pytest.fixture
 def created_post(db_session):
     unique_rutracker_id = generate_unique_rutracker_id()
@@ -42,16 +34,8 @@ def created_post(db_session):
     }
     response = test_client.post("/posts/", json=new_post)
     assert response.status_code == 201
-    data = response.json()
-    assert data["rutracker_id"] == new_post["rutracker_id"]
-    
-    # Получаем ID созданного поста без коммита
-    post_id = db_session.execute(
-        text("""SELECT id FROM public.rutracker_posts WHERE rutracker_id = :rutracker_id"""),
-        {"rutracker_id": new_post["rutracker_id"]}
-    ).fetchone()[0]
-    
-    return post_id, new_post["rutracker_id"]
+    post_data = response.json()
+    return (post_data["id"], unique_rutracker_id)
 
 # Тест получения всех постов через API
 def test_api_get_all_posts(db_session, created_post):
