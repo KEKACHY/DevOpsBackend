@@ -44,6 +44,17 @@ def get_post(post_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Post not found")
     return post
 
+# Маршрут для создания нового поста
+@app.post("/posts/", response_model=RutrackerPostResponse, status_code=201)
+def create_post(post: RutrackerPostCreate, db: Session = Depends(get_db)):
+    post_id = models.add_post(db, **post.dict())
+    
+    if not post_id:
+        raise HTTPException(status_code=500, detail="Failed to create or retrieve post")
+    
+    created_post = models.get_post_by_id(db, post_id)
+    return created_post
+
 # Маршрут для обновления поста
 @app.put("/posts/{post_id}", response_model=RutrackerPostResponse)
 def update_post(post_id: int, post: RutrackerPostCreate, db: Session = Depends(get_db)):
