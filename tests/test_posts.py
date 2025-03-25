@@ -1,10 +1,10 @@
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from DevOpsBackend.app.config import Config
-from DevOpsBackend.app.models import Base
-from DevOpsBackend.app import app
+from config import Config
+from models import get_all_posts, get_post_by_id, update_post, delete_post
 from fastapi.testclient import TestClient
+from main import app
 import os
 import uuid
 
@@ -13,27 +13,34 @@ TEST_DB_NAME = f"test_db_{uuid.uuid4().hex[:8]}"
 MASTER_DB_URI = Config.SQLALCHEMY_DATABASE_URI
 TEST_DB_URI = Config.SQLALCHEMY_DATABASE_URI.rsplit('/', 1)[0] + f"/{TEST_DB_NAME}"
 
+# Тестовые данные
+TEST_POST = {
+    "rutracker_id": "test_id_123",
+    "link": "http://test.example.com",
+    "title": "Test Post",
+    "seeds": 10,
+    "leaches": 5,
+    "size": "1.2GB"
+}
+
 # ----- Фикстуры для управления тестовой БД -----
 @pytest.fixture(scope="session", autouse=True)
 def create_test_database():
-    """Создаёт временную БД перед всеми тестами и удаляет после"""
-    # Подключаемся к основной БД для создания тестовой
-    master_engine = create_engine(MASTER_DB_URI, isolation_level="AUTOCOMMIT")
-    with master_engine.connect() as conn:
-        conn.execute(text(f"CREATE DATABASE {TEST_DB_NAME}"))
-    
-    # Настраиваем соединение с тестовой БД
-    os.environ["SQLALCHEMY_TEST_DATABASE_URI"] = TEST_DB_URI
-    engine = create_engine(TEST_DB_URI)
-    Base.metadata.create_all(engine)
-    
-    yield  # Здесь выполняются все тесты
-    
-    # Пост-очистка: удаляем тестовую БД
-    engine.dispose()
-    with master_engine.connect() as conn:
-        conn.execute(text(f"DROP DATABASE {TEST_DB_NAME}"))
-    master_engine.dispose()
+    master_engine = None
+    try:
+        master_engine = create_engine(MASTER_DB_URI, isolation_level="AUTOCOMMIT")
+        with master_engine.connect() as conn:
+            conn.execute(text(f"CREATE DATABASE {TEST_DB_NAME} WITH TEMPLATE {MASTER_DB_URI.split('/')[-1]}"))
+        
+        engine = create_engine(TEST_DB_URI)
+        yield
+        
+    finally:
+        if master_engine:
+            engine.dispose()
+            with master_engine.connect() as conn:
+                conn.execute(text(f"DROP DATABASE IF EXISTS {TEST_DB_NAME}"))
+            master_engine.dispose()
 
 @pytest.fixture
 def db_session():
@@ -56,65 +63,87 @@ def client():
     with TestClient(app) as client:
         yield client
 
-# ----- Тестовые данные -----
-TEST_POST = {
-    "rutracker_id": "test_id",
-    "link": "http://example.com",
-    "title": "Test Post",
-    "seeds": 10,
-    "leaches": 5,
-    "size": "100MB"
-}
-
-# ----- Тесты -----
-def test_get_all_posts(client, db_session):
-    db_session.execute(text("""
+@pytest.fixture
+def test_post_id(db_session):
+    """Создает тестовый пост и возвращает его ID"""
+    result = db_session.execute(text("""
         INSERT INTO rutracker_posts 
         (rutracker_id, link, title, seeds, leaches, size) 
-        VALUES (:id, :link, :title, :seeds, :leaches, :size)
+        VALUES (:rutracker_id, :link, :title, :seeds, :leaches, :size)
+        RETURNING id
     """), TEST_POST)
     db_session.commit()
+    return result.fetchone()[0]
 
-    response = client.get("/posts/")
-    assert response.status_code == 200
-    assert len(response.json()) > 0
+# ----- Тесты для функций models.py -----
+def test_get_all_posts(db_session, test_post_id):
+    posts = get_all_posts(db_session)
+    assert isinstance(posts, list)
+    assert len(posts) > 0
+    assert any(post.rutracker_id == TEST_POST["rutracker_id"] for post in posts)
 
-def test_get_post_by_id(client, db_session):
-    db_session.execute(text("""
-        INSERT INTO rutracker_posts 
-        (rutracker_id, link, title, seeds, leaches, size) 
-        VALUES (:id, :link, :title, :seeds, :leaches, :size)
-    """), TEST_POST)
-    db_session.commit()
+def test_get_post_by_id(db_session, test_post_id):
+    post = get_post_by_id(db_session, test_post_id)
+    assert post is not None
+    assert post.rutracker_id == TEST_POST["rutracker_id"]
+    assert post.title == TEST_POST["title"]
 
-    response = client.get("/posts/1")
-    assert response.status_code == 200
-    assert response.json()["title"] == TEST_POST["title"]
-
-def test_update_post(client, db_session):
-    # Добавляем тестовые данные
-    db_session.execute("INSERT INTO rutracker_posts (rutracker_id, link, title, seeds, leaches, size) VALUES ('test_id', 'http://example.com', 'Test Post', 10, 5, '100MB')")
-    db_session.commit()
-
-    response = client.put("/posts/1", json={
-        "rutracker_id": "updated_id",
-        "link": "http://example.com/updated",
+def test_update_post(db_session, test_post_id):
+    updated_data = {
+        "rutracker_id": "updated_id_456",
+        "link": "http://updated.example.com",
         "title": "Updated Post",
         "seeds": 20,
         "leaches": 10,
-        "size": "200MB"
-    })
+        "size": "2.5GB"
+    }
+    update_post(db_session, test_post_id, **updated_data)
+    
+    updated_post = get_post_by_id(db_session, test_post_id)
+    assert updated_post.rutracker_id == updated_data["rutracker_id"]
+    assert updated_post.title == updated_data["title"]
+
+def test_delete_post(db_session, test_post_id):
+    # Убедимся, что пост существует перед удалением
+    post = get_post_by_id(db_session, test_post_id)
+    assert post is not None
+    
+    delete_post(db_session, test_post_id)
+    
+    deleted_post = get_post_by_id(db_session, test_post_id)
+    assert deleted_post is None
+
+# ----- Тесты для API endpoints -----
+def test_api_get_all_posts(client, test_post_id):
+    response = client.get("/posts/")
     assert response.status_code == 200
-    assert response.json()["title"] == "Updated Post"
+    posts = response.json()
+    assert isinstance(posts, list)
+    assert any(post["rutracker_id"] == TEST_POST["rutracker_id"] for post in posts)
 
-def test_delete_post(client, db_session):
-    # Добавляем тестовые данные
-    db_session.execute("INSERT INTO rutracker_posts (rutracker_id, link, title, seeds, leaches, size) VALUES ('test_id', 'http://example.com', 'Test Post', 10, 5, '100MB')")
-    db_session.commit()
-
-    response = client.delete("/posts/1")
+def test_api_get_post_by_id(client, test_post_id):
+    response = client.get(f"/posts/{test_post_id}")
     assert response.status_code == 200
+    post = response.json()
+    assert post["rutracker_id"] == TEST_POST["rutracker_id"]
+    assert post["title"] == TEST_POST["title"]
 
-    # Проверяем, что пост был удален
-    response = client.get("/posts/1")
+def test_api_update_post(client, test_post_id):
+    updated_data = {
+        "rutracker_id": "updated_id_789",
+        "link": "http://api-updated.example.com",
+        "title": "API Updated Post",
+        "seeds": 30,
+        "leaches": 15,
+        "size": "3.7GB"
+    }
+    response = client.put(f"/posts/{test_post_id}", json=updated_data)
+    assert response.status_code == 200
+    assert response.json()["title"] == updated_data["title"]
+
+def test_api_delete_post(client, test_post_id):
+    response = client.delete(f"/posts/{test_post_id}")
+    assert response.status_code == 200
+    
+    response = client.get(f"/posts/{test_post_id}")
     assert response.status_code == 404
