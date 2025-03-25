@@ -31,38 +31,27 @@ def get_post_id_by_rutracker_id(db: Session, rutracker_id: str):
     return result.scalar()
 
 # Функция для добавления поста
-def add_post(db: Session, rutracker_id: str, link: str, title: str, seeds: int, leaches: int, size: str):
-    db.execute(
-        text("CALL add_posts(:rutracker_id, :link, :title, :seeds, :leaches, :size)"),
-        {
-            "rutracker_id": rutracker_id,
-            "link": link,
-            "title": title,
-            "seeds": seeds,
-            "leaches": leaches,
-            "size": size
-        }
+def add_post(db, rutracker_id, link, title, seeds, leaches, size):
+    result = db.execute(
+        text("SELECT * FROM add_posts(:rutracker_id, :link, :title, :seeds, :leaches, :size)"),
+        {"rutracker_id": rutracker_id, "link": link, "title": title, 
+         "seeds": seeds, "leaches": leaches, "size": size}
     )
     db.commit()
-    return get_post_id_by_rutracker_id(db, rutracker_id)
+    return result.fetchone()[0]
 
-# Функция для обновления поста
-def update_post(db: Session, post_id: int, rutracker_id: str, link: str, title: str, seeds: int, leaches: int, size: str):
+def update_post(db, post_id, rutracker_id, link, title, seeds, leaches, size):
     db.execute(
-        text("CALL update_post(:post_id, :rutracker_id, :link, :title, :seeds, :leaches, :size)"),
-        {
-            "post_id": post_id,
-            "rutracker_id": rutracker_id,
-            "link": link,
-            "title": title,
-            "seeds": seeds,
-            "leaches": leaches,
-            "size": size
-        }
+        text("SELECT update_post(:post_id, :rutracker_id, :link, :title, :seeds, :leaches, :size)"),
+        {"post_id": post_id, "rutracker_id": rutracker_id, "link": link,
+         "title": title, "seeds": seeds, "leaches": leaches, "size": size}
     )
     db.commit()
 
 # Функция для удаления поста
 def delete_post(db: Session, post_id: int):
-    db.execute(text("CALL delete_post(:post_id)"), {"post_id": post_id})
+    db.execute(
+        text("SELECT delete_post(:post_id)"),  # Используем SELECT вместо CALL
+        {"post_id": post_id}
+    )
     db.commit()
