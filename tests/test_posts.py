@@ -4,12 +4,12 @@ from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 from app.config import Config
 from app.main import app
+from app.models import Base
 
-# Используем основную базу данных
+# Используем основную БД
 engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Тестовые данные
 TEST_POST = {
     "rutracker_id": "test_id_123",
     "link": "http://test.example.com",
@@ -19,9 +19,19 @@ TEST_POST = {
     "size": "1.2GB"
 }
 
+@pytest.fixture(scope="session", autouse=True)
+def prepare_tables():
+    """Создаем таблицы перед всеми тестами (если их нет)"""
+    Base.metadata.create_all(engine)
+    yield
+    # Дополнительная очистка после всех тестов (опционально)
+    with engine.connect() as conn:
+        conn.execute(text("TRUNCATE TABLE rutracker_posts RESTART IDENTITY CASCADE"))
+        conn.commit()
+
 @pytest.fixture
 def db_session():
-    """Сессия для каждого теста с откатом изменений"""
+    """Сессия с откатом изменений после теста"""
     connection = engine.connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
@@ -29,7 +39,7 @@ def db_session():
     yield session
     
     session.close()
-    transaction.rollback()
+    transaction.rollback()  # Откатываем все изменения теста
     connection.close()
 
 @pytest.fixture
@@ -40,7 +50,7 @@ def client():
 
 @pytest.fixture
 def test_post_id(db_session):
-    """Создает тестовый пост и возвращает его ID"""
+    """Фикстура создает тестовый пост и возвращает его ID"""
     result = db_session.execute(text("""
         INSERT INTO rutracker_posts 
         (rutracker_id, link, title, seeds, leaches, size) 
@@ -50,31 +60,29 @@ def test_post_id(db_session):
     db_session.commit()
     return result.fetchone()[0]
 
+# Тесты для прямых SQL-запросов
 def test_get_all_posts(db_session, test_post_id):
-    """Тест получения всех постов"""
     posts = db_session.execute(text("SELECT * FROM rutracker_posts")).fetchall()
-    assert len(posts) >= 1  # Проверяем, что есть хотя бы наш тестовый пост
+    assert any(post.id == test_post_id for post in posts)
 
 def test_get_post_by_id(db_session, test_post_id):
-    """Тест получения поста по ID"""
     post = db_session.execute(
         text("SELECT * FROM rutracker_posts WHERE id = :id"),
         {"id": test_post_id}
     ).fetchone()
-    assert post is not None
-    assert post.rutracker_id == TEST_POST["rutracker_id"]
+    assert post.title == TEST_POST["title"]
 
 def test_update_post(db_session, test_post_id):
-    """Тест обновления поста"""
+    """Тест прямого SQL-обновления"""
     updated_data = {
-        "title": "Updated Title",
-        "seeds": 20
+        "title": "SQL Updated Title",
+        "seeds": 99
     }
     
     db_session.execute(
         text("""
             UPDATE rutracker_posts 
-            SET title = :title, seeds = :seeds
+            SET title = :title, seeds = :seeds 
             WHERE id = :id
         """),
         {**updated_data, "id": test_post_id}
@@ -86,63 +94,51 @@ def test_update_post(db_session, test_post_id):
         {"id": test_post_id}
     ).fetchone()
     
-    assert updated_post.title == updated_data["title"]
-    assert updated_post.seeds == updated_data["seeds"]
+    assert updated_post.title == "SQL Updated Title"
+    assert updated_post.seeds == 99
 
 def test_delete_post(db_session, test_post_id):
-    """Тест удаления поста"""
-    # Проверяем, что пост существует перед удалением
+    """Тест прямого SQL-удаления"""
+    # Проверяем существование перед удалением
     post = db_session.execute(
         text("SELECT 1 FROM rutracker_posts WHERE id = :id"),
         {"id": test_post_id}
     ).fetchone()
     assert post is not None
     
-    # Удаляем пост
+    # Удаляем
     db_session.execute(
         text("DELETE FROM rutracker_posts WHERE id = :id"),
         {"id": test_post_id}
     )
     db_session.commit()
     
-    # Проверяем, что пост удален
+    # Проверяем отсутствие
     deleted_post = db_session.execute(
         text("SELECT 1 FROM rutracker_posts WHERE id = :id"),
         {"id": test_post_id}
     ).fetchone()
     assert deleted_post is None
 
-# API тесты
+# API-тесты
 def test_api_get_all_posts(client, test_post_id):
-    """Тест API получения всех постов"""
     response = client.get("/posts/")
     assert response.status_code == 200
-    assert any(post["id"] == test_post_id for post in response.json())
+    assert any(p["id"] == test_post_id for p in response.json())
 
 def test_api_get_post_by_id(client, test_post_id):
-    """Тест API получения поста по ID"""
     response = client.get(f"/posts/{test_post_id}")
     assert response.status_code == 200
-    assert response.json()["id"] == test_post_id
+    assert response.json()["title"] == TEST_POST["title"]
 
 def test_api_update_post(client, test_post_id):
-    """Тест API обновления поста"""
-    updated_data = {
-        "rutracker_id": "updated_id",
-        "link": "http://updated.example.com",
-        "title": "Updated Post",
-        "seeds": 30,
-        "leaches": 10,
-        "size": "2.5GB"
-    }
+    updated_data = {**TEST_POST, "title": "Updated Title"}
     response = client.put(f"/posts/{test_post_id}", json=updated_data)
     assert response.status_code == 200
-    assert response.json()["title"] == updated_data["title"]
+    assert response.json()["title"] == "Updated Title"
 
 def test_api_delete_post(client, test_post_id):
-    """Тест API удаления поста"""
     response = client.delete(f"/posts/{test_post_id}")
     assert response.status_code == 200
-    
     response = client.get(f"/posts/{test_post_id}")
     assert response.status_code == 404
