@@ -22,6 +22,9 @@ class RutrackerPostResponse(RutrackerPostCreate):
     class Config:
         orm_mode = True
 
+class PostDeleteResponse(BaseModel):
+    id: int
+
 # Функция для получения сессии БД
 def get_db():
     db = SessionLocal()
@@ -63,10 +66,15 @@ def update_post(post_id: int, post: RutrackerPostCreate, db: Session = Depends(g
     return updated_post
 
 # Маршрут для удаления поста
-@app.delete("/posts/{post_id}", response_model=RutrackerPostResponse)
+@app.delete("/posts/{post_id}", response_model=PostDeleteResponse)
 def delete_post(post_id: int, db: Session = Depends(get_db)):
     post = models.get_post_by_id(db, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+    
+    # Удаляем пост
     models.delete_post(db, post_id)
+    
+    # Возвращаем только ID удалённого поста
     return {"id": post_id}
+

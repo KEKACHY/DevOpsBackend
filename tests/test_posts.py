@@ -91,11 +91,15 @@ def test_api_update_post(db_session, created_post):
     assert updated_post["leaches"] == updated_data["leaches"]
 
 # Тест удаления поста через API
+# Тест удаления поста через API
 def test_api_delete_post(db_session, created_post):
     post_id, rutracker_id = created_post
     response = test_client.delete(f"/posts/{post_id}")
     assert response.status_code == 200
     data = response.json()
+    
+    # Проверяем, что в ответе есть только id
+    assert "id" in data  # Проверяем, что id в ответе есть
     assert data["id"] == post_id
     
     # Убедимся, что пост был удален из базы
@@ -104,3 +108,4 @@ def test_api_delete_post(db_session, created_post):
         {"post_id": post_id}
     ).fetchone()
     assert post_in_db is None
+
