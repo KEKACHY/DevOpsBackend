@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 from app.config import Config
 from app.main import app
+from app import models  # Импортируем models для переопределения SessionLocal
 
 # Настройка подключения к основной БД
 engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
@@ -26,8 +27,14 @@ def db_session():
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
     
+    # Временное переопределение SessionLocal для зависимостей FastAPI
+    original_session_local = models.SessionLocal
+    models.SessionLocal = lambda: session
+    
     yield session
     
+    # Восстанавливаем оригинальный SessionLocal
+    models.SessionLocal = original_session_local
     session.close()
     transaction.rollback()
     connection.close()
@@ -124,35 +131,66 @@ def test_sql_delete_post(db_session, test_post_id):
 
 
 # ТЕСТЫ ДЛЯ API
-def test_api_create_post(client):
+def test_api_create_post(client, db_session):
     """Тест создания записи через API"""
     response = client.post("/posts/", json=TEST_POST)
     assert response.status_code == 200
     assert response.json()["title"] == TEST_POST["title"]
+    
+    # Проверяем, что запись действительно создана в БД
+    post_id = response.json()["id"]
+    post = db_session.execute(
+        text("SELECT 1 FROM rutracker_posts WHERE id = :id"),
+        {"id": post_id}
+    ).fetchone()
+    assert post is not None
 
 def test_api_get_all_posts(client, test_post_id):
     """Тест получения всех записей через API"""
     response = client.get("/posts/")
     assert response.status_code == 200
-    assert any(p["id"] == test_post_id for p in response.json())
+    posts = response.json()
+    assert isinstance(posts, list)
+    assert any(p["id"] == test_post_id for p in posts)
 
 def test_api_get_post_by_id(client, test_post_id):
     """Тест получения одной записи через API"""
     response = client.get(f"/posts/{test_post_id}")
     assert response.status_code == 200
-    assert response.json()["title"] == TEST_POST["title"]
+    data = response.json()
+    assert data["id"] == test_post_id
+    assert data["title"] == TEST_POST["title"]
 
 def test_api_update_post(client, test_post_id):
     """Тест обновления записи через API"""
-    updated_data = {**TEST_POST, "title": "API Updated Title"}
+    updated_data = {
+        "rutracker_id": "updated_id",
+        "link": "http://updated.example.com",
+        "title": "API Updated Title",
+        "seeds": 20,
+        "leaches": 10,
+        "size": "2.5GB"
+    }
     response = client.put(f"/posts/{test_post_id}", json=updated_data)
     assert response.status_code == 200
     assert response.json()["title"] == "API Updated Title"
 
-def test_api_delete_post(client, test_post_id):
+def test_api_delete_post(client, test_post_id, db_session):
     """Тест удаления записи через API"""
+    # Проверяем, что пост существует перед удалением
+    post = db_session.execute(
+        text("SELECT 1 FROM rutracker_posts WHERE id = :id"),
+        {"id": test_post_id}
+    ).fetchone()
+    assert post is not None
+    
+    # Удаляем пост
     response = client.delete(f"/posts/{test_post_id}")
     assert response.status_code == 200
     
-    response = client.get(f"/posts/{test_post_id}")
-    assert response.status_code == 404
+    # Проверяем, что пост действительно удален
+    post = db_session.execute(
+        text("SELECT 1 FROM rutracker_posts WHERE id = :id"),
+        {"id": test_post_id}
+    ).fetchone()
+    assert post is None
