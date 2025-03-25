@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
-from main import app
-from config import Config
+from .main import app
+from .config import Config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
