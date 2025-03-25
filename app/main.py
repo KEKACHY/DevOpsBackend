@@ -24,7 +24,7 @@ class RutrackerPostResponse(RutrackerPostCreate):
 
 # Функция для получения сессии БД
 def get_db():
-    db = models.SessionLocal()
+    db = SessionLocal()
     try:
         yield db
     finally:
@@ -59,7 +59,8 @@ def create_post(post: RutrackerPostCreate, db: Session = Depends(get_db)):
 @app.put("/posts/{post_id}", response_model=RutrackerPostResponse)
 def update_post(post_id: int, post: RutrackerPostCreate, db: Session = Depends(get_db)):
     models.update_post(db, post_id, **post.dict())
-    return {**post.dict(), "id": post_id}
+    updated_post = models.get_post_by_id(db, post_id)
+    return updated_post
 
 # Маршрут для удаления поста
 @app.delete("/posts/{post_id}", response_model=RutrackerPostResponse)

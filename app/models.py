@@ -31,15 +31,16 @@ def get_post_id_by_rutracker_id(db: Session, rutracker_id: str):
     return result.scalar()
 
 # Функция для добавления поста
-def add_post(db, rutracker_id, link, title, seeds, leaches, size):
+def create_post(db, rutracker_id, link, title, seeds, leaches, size):
     result = db.execute(
-        text("SELECT * FROM add_posts(:rutracker_id, :link, :title, :seeds, :leaches, :size)"),
+        text("SELECT create_posts(:rutracker_id, :link, :title, :seeds, :leaches, :size)"),
         {"rutracker_id": rutracker_id, "link": link, "title": title, 
          "seeds": seeds, "leaches": leaches, "size": size}
     )
     db.commit()
-    return result.fetchone()[0]
+    return result.fetchone()[0] 
 
+# Функция для обновления поста
 def update_post(db, post_id, rutracker_id, link, title, seeds, leaches, size):
     db.execute(
         text("SELECT update_post(:post_id, :rutracker_id, :link, :title, :seeds, :leaches, :size)"),
@@ -51,7 +52,7 @@ def update_post(db, post_id, rutracker_id, link, title, seeds, leaches, size):
 # Функция для удаления поста
 def delete_post(db: Session, post_id: int):
     db.execute(
-        text("SELECT delete_post(:post_id)"),  # Используем SELECT вместо CALL
+        text("SELECT delete_post(:post_id)"),
         {"post_id": post_id}
     )
     db.commit()
