@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.config import Config
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import Session
 
@@ -27,9 +27,9 @@ def db_session():
 def test_api_get_all_posts(db_session):
     # Сначала создаем несколько постов в тестовой базе
     db_session.execute(
-        """
+        text("""
         SELECT public.create_posts('test123', 'http://example.com', 'Test Post', 10, 5, '700MB');
-        """
+        """)
     )
     db_session.commit()
     
@@ -55,7 +55,9 @@ def test_api_create_post(db_session):
     assert data["rutracker_id"] == new_post["rutracker_id"]
     # Проверим, что пост действительно был создан в базе
     post_in_db = db_session.execute(
-        "SELECT * FROM public.rutracker_posts WHERE rutracker_id = :rutracker_id", 
+        text("""
+        SELECT * FROM public.rutracker_posts WHERE rutracker_id = :rutracker_id
+        """), 
         {"rutracker_id": new_post["rutracker_id"]}
     ).fetchone()
     assert post_in_db is not None
@@ -64,9 +66,9 @@ def test_api_create_post(db_session):
 def test_api_get_post_by_id(db_session):
     # Сначала создаем пост в базе данных для теста
     post_id = db_session.execute(
-        """
+        text("""
         SELECT public.create_posts('test123', 'http://example.com', 'Test Post', 10, 5, '700MB');
-        """
+        """)
     ).fetchone()[0]
     db_session.commit()
     
@@ -80,9 +82,9 @@ def test_api_get_post_by_id(db_session):
 def test_api_update_post(db_session):
     # Сначала создаем пост в базе для теста
     post_id = db_session.execute(
-        """
+        text("""
         SELECT public.create_posts('test123', 'http://example.com', 'Test Post', 10, 5, '700MB');
-        """
+        """)
     ).fetchone()[0]
     db_session.commit()
     
@@ -106,9 +108,9 @@ def test_api_update_post(db_session):
 def test_api_delete_post(db_session):
     # Сначала создаем пост в базе для теста
     post_id = db_session.execute(
-        """
+        text("""
         SELECT public.create_posts('test123', 'http://example.com', 'Test Post', 10, 5, '700MB');
-        """
+        """)
     ).fetchone()[0]
     db_session.commit()
 
@@ -119,7 +121,9 @@ def test_api_delete_post(db_session):
     
     # Убедимся, что пост был удален из базы
     post_in_db = db_session.execute(
-        "SELECT * FROM public.rutracker_posts WHERE id = :post_id", 
+        text("""
+        SELECT * FROM public.rutracker_posts WHERE id = :post_id
+        """), 
         {"post_id": post_id}
     ).fetchone()
     assert post_in_db is None
