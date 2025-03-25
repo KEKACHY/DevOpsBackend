@@ -18,10 +18,10 @@ def db_session():
     # Открываем сессию для каждого теста
     db = SessionLocal()
     # Начинаем транзакцию
-    db.begin()
+    transaction = db.begin()
     yield db
     # Откатываем транзакцию после завершения теста
-    db.rollback()
+    transaction.rollback()
     db.close()
 
 # Функция для генерации уникального rutracker_id
@@ -45,12 +45,11 @@ def created_post(db_session):
     data = response.json()
     assert data["rutracker_id"] == new_post["rutracker_id"]
     
-    # Вернем созданный пост для использования в других тестах
+    # Получаем ID созданного поста без коммита
     post_id = db_session.execute(
         text("""SELECT id FROM public.rutracker_posts WHERE rutracker_id = :rutracker_id"""),
         {"rutracker_id": new_post["rutracker_id"]}
     ).fetchone()[0]
-    db_session.commit()
     
     return post_id, new_post["rutracker_id"]
 
@@ -90,7 +89,6 @@ def test_api_update_post(db_session, created_post):
     assert updated_post["seeds"] == updated_data["seeds"]
     assert updated_post["leaches"] == updated_data["leaches"]
 
-# Тест удаления поста через API
 # Тест удаления поста через API
 def test_api_delete_post(db_session, created_post):
     post_id, rutracker_id = created_post
