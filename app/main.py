@@ -4,8 +4,18 @@ from . import models
 from pydantic import BaseModel
 from typing import List
 from .config import SessionLocal
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+# Разрешаем все origins (для разработки)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Разрешаем все домены
+    allow_credentials=True,
+    allow_methods=["*"],  # Разрешаем все методы (GET, POST и т.д.)
+    allow_headers=["*"],  # Разрешаем все заголовки
+)
 
 # Модели данных для запросов и ответов
 class RutrackerPostCreate(BaseModel):
