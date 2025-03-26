@@ -57,7 +57,7 @@ jobs:
     needs: [build, test]  # Зависит от успешного выполнения build и test
     steps:
       - name: Deploy to server via SSH
-        uses: appleboy/ssh-action@v1.0.7
+        uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.SERVER_HOST }}  # IP сервера (185.170.153.5)
           username: ${{ secrets.SERVER_USERNAME }}  # root или ваш пользователь
