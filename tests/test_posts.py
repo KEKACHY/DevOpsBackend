@@ -67,7 +67,7 @@ def test_api_get_post_by_id(db_session, created_post):
 def test_api_update_post(db_session, created_post):
     post_id, rutracker_id = created_post
     updated_data = {
-        "rutracker_id": "updated123",
+        "rutracker_id": f"updated-{uuid.uuid4()}",  # Генерация уникального ID
         "link": "http://example.com/updated",
         "title": "Updated Post",
         "seeds": 20,
