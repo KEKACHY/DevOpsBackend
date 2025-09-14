@@ -3,6 +3,7 @@ import uuid
 from fastapi.testclient import TestClient
 from app.main import app
 from app import models
+import requests
 
 test_client = TestClient(app)
 
@@ -51,7 +52,7 @@ def test_send_post(monkeypatch, created_post):
             def raise_for_status(self): pass
         return MockResponse()
 
-    monkeypatch.setattr("requests", "post", mock_post)
+    monkeypatch.setattr(requests, "post", mock_post)
 
     response = test_client.post(f"/send-post/{post_id}")
     assert response.status_code == 200
@@ -92,6 +93,11 @@ def test_api_get_post_by_id(monkeypatch, created_post):
     assert data["id"] == post_id
     assert data["rutracker_id"] == rutracker_id
 
+from types import SimpleNamespace
+import uuid
+from app import models
+from app.main import test_client
+
 # ---------------------------
 # Тест обновления поста
 # ---------------------------
@@ -106,12 +112,15 @@ def test_api_update_post(monkeypatch, created_post):
         "size": "1GB"
     }
 
-    # Мокаем update_post
+    # Мокаем update_post, возвращаем словарь для JSON
     def mock_update_post(db, pid, rutracker_id, link, title, seeds, leaches, size):
         assert pid == post_id
-        return {"id": pid, **updated_data}  # словарь для JSON
+        return {"id": pid, **updated_data}
 
     monkeypatch.setattr(models, "update_post", mock_update_post)
+
+    # Мокаем get_db, чтобы эндпоинд не обращался к БД
+    monkeypatch.setattr("app.main.get_db", lambda: iter([SimpleNamespace()]))
 
     response = test_client.put(f"/posts/{post_id}", json=updated_data)
     assert response.status_code == 200
@@ -127,12 +136,15 @@ def test_api_update_post(monkeypatch, created_post):
 def test_api_delete_post(monkeypatch, created_post):
     post_id, rutracker_id, post_data = created_post
 
-    # Мокаем delete_post
+    # Мокаем delete_post, возвращаем словарь для JSON
     def mock_delete_post(db, pid):
         assert pid == post_id
-        return {"id": pid}  # словарь для JSON
+        return {"id": pid}
 
     monkeypatch.setattr(models, "delete_post", mock_delete_post)
+
+    # Мокаем get_db
+    monkeypatch.setattr("app.main.get_db", lambda: iter([SimpleNamespace()]))
 
     response = test_client.delete(f"/posts/{post_id}")
     assert response.status_code == 200
