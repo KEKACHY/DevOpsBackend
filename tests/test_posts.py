@@ -3,24 +3,19 @@ import uuid
 from fastapi.testclient import TestClient
 from app.main import app
 from app import models
-import requests 
-from types import SimpleNamespace
 
 test_client = TestClient(app)
 
 # ---------------------------
-# База данных
+# Мокаем get_db, чтобы эндпоинды не обращались к реальной БД
 # ---------------------------
-@pytest.fixture
-def db_session():
-    from app.config import SessionLocal
-    db = SessionLocal()
-    db.begin()
-    try:
-        yield db
-    finally:
-        db.rollback()
-        db.close()
+class DummyDB:
+    pass
+
+@pytest.fixture(autouse=True)
+def mock_db(monkeypatch):
+    # Подменяем функцию get_db на фиктивную, которая возвращает DummyDB
+    monkeypatch.setattr("app.main.get_db", lambda: iter([DummyDB()]))
 
 # ---------------------------
 # Создание поста
@@ -41,24 +36,22 @@ def created_post():
     return post_id, rutracker_id, post_data
 
 # ---------------------------
-# Тест отправки сообщения
+# Тест отправки поста в Telegram
 # ---------------------------
-def test_send_post(monkeypatch, db_session, created_post):
+def test_send_post(monkeypatch, created_post):
     post_id, rutracker_id, post_data = created_post
 
-    def mock_get_post_by_id(db, post_id):
-        return SimpleNamespace(**post_data)  
+    # Мокаем функцию get_post_by_id
+    monkeypatch.setattr(models, "get_post_by_id", lambda db, pid: post_data)
 
-    monkeypatch.setattr(models, "get_post_by_id", mock_get_post_by_id)
-
+    # Мокаем requests.post
     def mock_post(url, data=None, **kwargs):
         class MockResponse:
             status_code = 200
             def raise_for_status(self): pass
         return MockResponse()
 
-    import requests
-    monkeypatch.setattr(requests, "post", mock_post)
+    monkeypatch.setattr("requests", "post", mock_post)
 
     response = test_client.post(f"/send-post/{post_id}")
     assert response.status_code == 200
@@ -69,9 +62,8 @@ def test_send_post(monkeypatch, db_session, created_post):
 def test_api_get_all_posts(monkeypatch, created_post):
     post_id, rutracker_id, post_data = created_post
 
-    # Мокаем get_all_posts
     def mock_get_all_posts(db):
-        return [SimpleNamespace(**post_data)]
+        return [post_data]  # словарь, чтобы JSON сериализовался
 
     monkeypatch.setattr(models, "get_all_posts", mock_get_all_posts)
 
@@ -90,7 +82,7 @@ def test_api_get_post_by_id(monkeypatch, created_post):
 
     def mock_get_post_by_id(db, pid):
         assert pid == post_id
-        return SimpleNamespace(**post_data)
+        return post_data  # словарь
 
     monkeypatch.setattr(models, "get_post_by_id", mock_get_post_by_id)
 
@@ -114,10 +106,10 @@ def test_api_update_post(monkeypatch, created_post):
         "size": "1GB"
     }
 
-    # Мокаем update_post, чтобы ничего не делал
+    # Мокаем update_post
     def mock_update_post(db, pid, rutracker_id, link, title, seeds, leaches, size):
         assert pid == post_id
-        return SimpleNamespace(id=pid, **updated_data)
+        return {"id": pid, **updated_data}  # словарь для JSON
 
     monkeypatch.setattr(models, "update_post", mock_update_post)
 
@@ -138,7 +130,7 @@ def test_api_delete_post(monkeypatch, created_post):
     # Мокаем delete_post
     def mock_delete_post(db, pid):
         assert pid == post_id
-        return SimpleNamespace(id=pid)
+        return {"id": pid}  # словарь для JSON
 
     monkeypatch.setattr(models, "delete_post", mock_delete_post)
 
