@@ -2,25 +2,21 @@ import pytest
 import uuid
 from fastapi.testclient import TestClient
 from app.main import app
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from app.models import Base  # Твои модели SQLAlchemy
-
-# Создаём SQLite in-memory
-engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-SessionTesting = sessionmaker(bind=engine)
-Base.metadata.create_all(bind=engine)
+from app import models  # импортируем твои функции, но Base нет
 
 test_client = TestClient(app)
 
-# Fixture для сессии БД
+# Fixture для фиктивной сессии (можно использовать реальный SessionLocal или sqlite in-memory)
 @pytest.fixture
 def db_session():
-    session = SessionTesting()
+    from app.config import SessionLocal
+    db = SessionLocal()
+    db.begin()  # начинаем транзакцию
     try:
-        yield session
+        yield db
     finally:
-        session.close()
+        db.rollback()  # откатываем после теста
+        db.close()
 
 # Fixture для тестового поста
 @pytest.fixture
@@ -38,24 +34,24 @@ def created_post():
     }
     return post_id, rutracker_id, post_data
 
-# Тест отправки поста
+# Тест отправки поста через /send-post/
 def test_send_post(monkeypatch, db_session, created_post):
     post_id, rutracker_id, post_data = created_post
 
-    # Мок функции get_post_by_id
+    # Мокаем функцию get_post_by_id из models.py
     def mock_get_post_by_id(db, post_id):
         return post_data
 
-    monkeypatch.setattr("app.models.get_post_by_id", mock_get_post_by_id)
+    monkeypatch.setattr(models, "get_post_by_id", mock_get_post_by_id)
 
-    # Мок requests.post
+    # Мокаем requests.post
     def mock_post(url, data=None, **kwargs):
         class MockResponse:
             status_code = 200
             def raise_for_status(self): pass
         return MockResponse()
 
-    monkeypatch.setattr("requests.post", mock_post)
+    monkeypatch.setattr("requests", "post", mock_post)
 
     response = test_client.post(f"/send-post/{post_id}")
     assert response.status_code == 200
