@@ -10,7 +10,7 @@ on:
 
 env:
   SONAR_HOST_URL: "http://188.225.42.100:9000"
-  SONAR_PROJECT_KEY: "DevOpsLab4"
+  SONAR_PROJECT_KEY: "Backend"
 
 jobs:
   build:
