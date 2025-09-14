@@ -1,5 +1,6 @@
 import pytest
 import uuid
+from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from app.main import app
 from app import models
@@ -92,11 +93,6 @@ def test_api_get_post_by_id(monkeypatch, created_post):
     data = response.json()
     assert data["id"] == post_id
     assert data["rutracker_id"] == rutracker_id
-
-from types import SimpleNamespace
-import uuid
-from app import models
-from app.main import test_client
 
 # ---------------------------
 # Тест обновления поста
