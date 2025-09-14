@@ -8,15 +8,20 @@ import requests
 
 test_client = TestClient(app)
 
+class DummyDB:
+    def commit(self): return None
+    def refresh(self, obj): return None
+    def delete(self, obj): return None
+    def execute(self, *args, **kwargs): return None
 
 # ---------------------------
 # Фикстура для мокнутой БД
 # ---------------------------
 @pytest.fixture(autouse=True)
 def override_get_db():
-    """Подменяем зависимость get_db на фиктивную"""
+    """Подменяем зависимость get_db на фейковую сессию"""
     def dummy_db():
-        yield SimpleNamespace()
+        yield DummyDB()
     app.dependency_overrides[get_db] = dummy_db
     yield
     app.dependency_overrides.clear()
