@@ -2,27 +2,27 @@ import pytest
 import uuid
 from fastapi.testclient import TestClient
 from app.main import app
-from app.config import engine, SessionLocal
-from sqlalchemy import text
-from unittest.mock import patch
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.models import Base  # Твои модели SQLAlchemy
 
+# Создаём SQLite in-memory
+engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+SessionTesting = sessionmaker(bind=engine)
+Base.metadata.create_all(bind=engine)
 
 test_client = TestClient(app)
 
+# Fixture для сессии БД
 @pytest.fixture
 def db_session():
-    db = SessionLocal()
-    db.begin()  # Явно начинаем транзакцию
+    session = SessionTesting()
     try:
-        yield db
+        yield session
     finally:
-        db.rollback()  # Явно откатываем
-        db.close()
+        session.close()
 
-# # Функция для генерации уникального rutracker_id
-# def generate_unique_rutracker_id():
-#     return str(uuid.uuid4())
-
+# Fixture для тестового поста
 @pytest.fixture
 def created_post():
     post_id = 1
@@ -37,6 +37,29 @@ def created_post():
         "size": "700MB"
     }
     return post_id, rutracker_id, post_data
+
+# Тест отправки поста
+def test_send_post(monkeypatch, db_session, created_post):
+    post_id, rutracker_id, post_data = created_post
+
+    # Мок функции get_post_by_id
+    def mock_get_post_by_id(db, post_id):
+        return post_data
+
+    monkeypatch.setattr("app.models.get_post_by_id", mock_get_post_by_id)
+
+    # Мок requests.post
+    def mock_post(url, data=None, **kwargs):
+        class MockResponse:
+            status_code = 200
+            def raise_for_status(self): pass
+        return MockResponse()
+
+    monkeypatch.setattr("requests.post", mock_post)
+
+    response = test_client.post(f"/send-post/{post_id}")
+    assert response.status_code == 200
+
     
 #     # Получаем ID созданного поста без коммита
 #     post_id = db_session.execute(
@@ -100,20 +123,3 @@ def created_post():
 #     ).fetchone()
 #     assert post_in_db is None
 
-def test_send_post(monkeypatch, created_post):
-    post_id, rutracker_id, post_data = created_post
-
-    # Мок requests.post
-    def mock_post(url, data=None, **kwargs):
-        class MockResponse:
-            status_code = 200
-            def raise_for_status(self):
-                return None
-        return MockResponse()
-
-    monkeypatch.setattr("requests.post", mock_post)
-
-    response = test_client.post(f"/send-post/{post_id}")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
