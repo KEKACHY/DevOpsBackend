@@ -23,27 +23,32 @@ class DummyExecuteResult:
     def fetchall(self):
         return list(self._rows)
 
+    def scalar(self):
+        # Для get_post_id_by_rutracker_id
+        return self._rows[0] if self._rows else None
+
 
 class DummyDB:
-    """
-    Минимально совместимая сессия: commit/refresh/delete/execute.
-    execute возвращает DummyExecuteResult — но в тестах
-    мы обычно мокируем models.* и не полагаемся на execute.
-    """
-    def commit(self):
-        return None
+    def __init__(self):
+        self.executed = []
 
-    def refresh(self, obj):
-        return None
-
-    def delete(self, obj):
-        return None
-
-    def execute(self, *args, **kwargs):
-        # Возвращаем объект с fetchone/fetchall, чтобы
-        # случайные вызовы не ломались.
+    def execute(self, stmt, params=None):
+        self.executed.append((stmt, params))
+        # Возвращаем разные типы в зависимости от запроса
+        sql = str(stmt)
+        if "get_all_posts()" in sql:
+            return DummyExecuteResult([{"id": 1, "title": "Post1"}])
+        if "get_post_by_id" in sql:
+            return DummyExecuteResult([{"id": params["post_id"], "title": "Post1"}])
+        if "rutracker_posts" in sql:
+            return DummyExecuteResult([42])
+        if "create_posts" in sql:
+            return DummyExecuteResult([99])  # вернём ID нового поста
         return DummyExecuteResult()
 
+@pytest.fixture
+def db():
+    return DummyDB()
 
 # ---------------------------
 # Фикстура: оверрайдим get_db на DummyDB
@@ -218,3 +223,97 @@ def test_api_delete_post(monkeypatch, created_post):
     body = resp.json()
     assert body["id"] == post_id
     assert called["deleted"] is True
+
+
+
+
+# ---------------------------
+# ---------------------------
+# Тесты для models.py
+# ---------------------------
+# ---------------------------
+
+class DummyExecuteResult:
+    def __init__(self, rows=None):
+        self._rows = rows or []
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return list(self._rows)
+
+    def scalar(self):
+        # Для get_post_id_by_rutracker_id
+        return self._rows[0] if self._rows else None
+
+
+# ---------------------------
+# Фейковая сессия
+# ---------------------------
+
+
+# ---------------------------
+# Фикстура для DB
+# ---------------------------
+@pytest.fixture
+def db():
+    return DummyDB()
+
+
+# ---------------------------
+# Тест: get_all_posts
+# ---------------------------
+def test_get_all_posts(db):
+    posts = models.get_all_posts(db)
+    assert isinstance(posts, list)
+    assert posts[0]["id"] == 1
+    assert "get_all_posts()" in str(db.executed[0][0])
+
+
+# ---------------------------
+# Тест: get_post_by_id
+# ---------------------------
+def test_get_post_by_id(db):
+    post = models.get_post_by_id(db, 5)
+    assert post["id"] == 5
+    stmt, params = db.executed[0]
+    assert params["post_id"] == 5
+
+
+# ---------------------------
+# Тест: get_post_id_by_rutracker_id
+# ---------------------------
+def test_get_post_id_by_rutracker_id(db):
+    post_id = models.get_post_id_by_rutracker_id(db, "abc123")
+    assert post_id == 42
+    stmt, params = db.executed[0]
+    assert params["rutracker_id"] == "abc123"
+
+
+# ---------------------------
+# Тест: create_post
+# ---------------------------
+def test_create_post(db):
+    new_id = models.create_post(db, "rut123", "link", "title", 10, 5, "700MB")
+    assert new_id == 99
+    stmt, params = db.executed[0]
+    assert params["title"] == "title"
+
+
+# ---------------------------
+# Тест: update_post
+# ---------------------------
+def test_update_post(db):
+    models.update_post(db, 1, "rut123", "link", "title", 10, 5, "700MB")
+    stmt, params = db.executed[0]
+    assert params["post_id"] == 1
+
+
+# ---------------------------
+# Тест: delete_post
+# ---------------------------
+def test_delete_post(db):
+    models.delete_post(db, 7)
+    stmt, params = db.executed[0]
+    assert params["post_id"] == 7
