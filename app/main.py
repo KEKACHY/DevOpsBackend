@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import List
 from .config import SessionLocal
 from fastapi.middleware.cors import CORSMiddleware
+import requests
 
 app = FastAPI()
 
@@ -34,6 +35,9 @@ class RutrackerPostResponse(RutrackerPostCreate):
 
 class PostDeleteResponse(BaseModel):
     id: int
+
+BOT_TOKEN = "Т7987831032:AAEI8FahwKLKUQL5mxrGxkYgWtRIdeVoZ_s"
+CHAT_ID = "-1002940859370"
 
 # Функция для получения сессии БД
 def get_db():
@@ -90,4 +94,37 @@ def delete_post(post_id: int, db: Session = Depends(get_db)):
     db.commit() 
     
     return {"id": post_id}
+
+# Маршрут для отправки сообщения
+@app.post("/send-post/{post_id}")
+def send_post_to_telegram(post_id: int, db: Session = Depends(get_db)):
+    """
+    Отправляет данные поста с заданным ID в Telegram.
+    """
+    post = models.get_post_by_id(db, post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    message = (
+        f"*{post.title}*\n\n"
+        f"Сиды: {post.seeds}\n"
+        f"Личи: {post.leaches}\n"
+        f"Размер: {post.size}\n\n"
+        f"[Перейти по ссылке]({post.link})\n"
+    )
+    
+    # Отправка в Telegram
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": CHAT_ID,
+            "text": message
+        }
+        response = requests.post(url, data=payload)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        return {"status": "error", "detail": str(e)}
+    
+    return {"status": "ok", "post_id": post.id}
+
 

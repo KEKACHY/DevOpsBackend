@@ -51,21 +51,3 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
         run: |
           PYTHONPATH=. pytest tests/ -v --disable-warnings
-    
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [build, test]  # Зависит от успешного выполнения build и test
-    steps:
-      - name: Deploy to server via SSH
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.SERVER_HOST }}  # IP сервера (185.170.153.5)
-          username: ${{ secrets.SERVER_USERNAME }}  # root или ваш пользователь
-          key: ${{ secrets.SERVER_SSH_KEY }}  # Приватный SSH-ключ
-          script: |
-            cd /var/www/backend
-            git pull origin master
-            source venv/bin/activate
-            pip install -r requirements.txt
-            sudo systemctl restart backend
-            echo "Deployment successful!"
