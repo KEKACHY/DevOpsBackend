@@ -23,22 +23,20 @@ def db_session():
 # def generate_unique_rutracker_id():
 #     return str(uuid.uuid4())
 
-# # Тест создания нового поста через API
-# @pytest.fixture
-# def created_post(db_session):
-#     unique_rutracker_id = generate_unique_rutracker_id()
-#     new_post = {
-#         "rutracker_id": unique_rutracker_id,
-#         "link": "http://example.com",
-#         "title": "Test Post",
-#         "seeds": 10,
-#         "leaches": 5,
-#         "size": "700MB"
-#     }
-#     response = test_client.post("/posts/", json=new_post)
-#     assert response.status_code == 201
-#     data = response.json()
-#     assert data["rutracker_id"] == new_post["rutracker_id"]
+@pytest.fixture
+def created_post():
+    post_id = 1
+    rutracker_id = str(uuid.uuid4())
+    post_data = {
+        "id": post_id,
+        "rutracker_id": rutracker_id,
+        "link": "http://example.com",
+        "title": "Test Post",
+        "seeds": 10,
+        "leaches": 5,
+        "size": "700MB"
+    }
+    return post_id, rutracker_id, post_data
     
 #     # Получаем ID созданного поста без коммита
 #     post_id = db_session.execute(
@@ -102,15 +100,19 @@ def db_session():
 #     ).fetchone()
 #     assert post_in_db is None
 
-def test_send_post(monkeypatch, db_session, created_post):
-    def mock_post(url, json=None, **kwargs):
+def test_send_post(monkeypatch, created_post):
+    post_id, rutracker_id, post_data = created_post
+
+    # Мок requests.post
+    def mock_post(url, data=None, **kwargs):
         class MockResponse:
             status_code = 200
+            def raise_for_status(self):
+                return None
         return MockResponse()
 
     monkeypatch.setattr("requests.post", mock_post)
 
-    post_id, _ = created_post
     response = test_client.post(f"/send-post/{post_id}")
     assert response.status_code == 200
     data = response.json()
