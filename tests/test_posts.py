@@ -1,3 +1,4 @@
+# tests/test_posts.py
 import pytest
 import uuid
 from types import SimpleNamespace
@@ -8,27 +9,56 @@ import requests
 
 test_client = TestClient(app)
 
-class DummyDB:
-    def commit(self): return None
-    def refresh(self, obj): return None
-    def delete(self, obj): return None
-    def execute(self, *args, **kwargs): return None
 
 # ---------------------------
-# Фикстура для мокнутой БД
+# Фейковая "сессия" БД — минимально реализована
+# ---------------------------
+class DummyExecuteResult:
+    def __init__(self, rows=None):
+        self._rows = rows or []
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return list(self._rows)
+
+
+class DummyDB:
+    """
+    Минимально совместимая сессия: commit/refresh/delete/execute.
+    execute возвращает DummyExecuteResult — но в тестах
+    мы обычно мокируем models.* и не полагаемся на execute.
+    """
+    def commit(self):
+        return None
+
+    def refresh(self, obj):
+        return None
+
+    def delete(self, obj):
+        return None
+
+    def execute(self, *args, **kwargs):
+        # Возвращаем объект с fetchone/fetchall, чтобы
+        # случайные вызовы не ломались.
+        return DummyExecuteResult()
+
+
+# ---------------------------
+# Фикстура: оверрайдим get_db на DummyDB
 # ---------------------------
 @pytest.fixture(autouse=True)
 def override_get_db():
-    """Подменяем зависимость get_db на фейковую сессию"""
-    def dummy_db():
+    def _dummy_db():
         yield DummyDB()
-    app.dependency_overrides[get_db] = dummy_db
+    app.dependency_overrides[get_db] = _dummy_db
     yield
     app.dependency_overrides.clear()
 
 
 # ---------------------------
-# Фикстура для тестового поста
+# Фикстура: шаблон поста
 # ---------------------------
 @pytest.fixture
 def created_post():
@@ -52,16 +82,15 @@ def created_post():
 def test_send_post(monkeypatch, created_post):
     post_id, _, post_data = created_post
 
-    # Мокаем get_post_by_id
+    # models.get_post_by_id должен вернуть объект с атрибутами
     monkeypatch.setattr(
         models,
         "get_post_by_id",
-        lambda db, pid: SimpleNamespace(**post_data),
+        lambda db, pid: SimpleNamespace(**post_data)
     )
 
     called = {}
 
-    # Мокаем requests.post
     def mock_post(url, data=None, **kwargs):
         called["url"] = url
         called["data"] = data
@@ -72,19 +101,19 @@ def test_send_post(monkeypatch, created_post):
 
     monkeypatch.setattr(requests, "post", mock_post)
 
-    response = test_client.post(f"/send-post/{post_id}")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
+    resp = test_client.post(f"/send-post/{post_id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    # В твоём приложении статус — "ok"
+    assert body.get("status") == "ok"
 
-    # Проверяем, что requests.post действительно вызвался
-    assert "url" in called
-    assert "data" in called
-    assert isinstance(called["data"], dict)
+    # Убедимся, что requests.post был вызван корректно
+    assert "url" in called and isinstance(called["url"], str)
+    assert "data" in called and isinstance(called["data"], dict)
 
 
 # ---------------------------
-# Тест: получение всех постов
+# Тест: получить все посты
 # ---------------------------
 def test_api_get_all_posts(monkeypatch, created_post):
     post_id, _, post_data = created_post
@@ -92,32 +121,32 @@ def test_api_get_all_posts(monkeypatch, created_post):
     monkeypatch.setattr(
         models,
         "get_all_posts",
-        lambda db: [SimpleNamespace(**post_data)],
+        lambda db: [SimpleNamespace(**post_data)]
     )
 
-    response = test_client.get("/posts/")
-    assert response.status_code == 200
-    posts = response.json()
+    resp = test_client.get("/posts/")
+    assert resp.status_code == 200
+    posts = resp.json()
     assert isinstance(posts, list)
     assert len(posts) == 1
     assert posts[0]["id"] == post_id
 
 
 # ---------------------------
-# Тест: получение поста по ID
+# Тест: получить пост по id
 # ---------------------------
 def test_api_get_post_by_id(monkeypatch, created_post):
     post_id, rutracker_id, post_data = created_post
 
-    def mock_get_post_by_id(db, pid):
+    def mock_get(db, pid):
         assert pid == post_id
         return SimpleNamespace(**post_data)
 
-    monkeypatch.setattr(models, "get_post_by_id", mock_get_post_by_id)
+    monkeypatch.setattr(models, "get_post_by_id", mock_get)
 
-    response = test_client.get(f"/posts/{post_id}")
-    assert response.status_code == 200
-    data = response.json()
+    resp = test_client.get(f"/posts/{post_id}")
+    assert resp.status_code == 200
+    data = resp.json()
     assert data["id"] == post_id
     assert data["rutracker_id"] == rutracker_id
 
@@ -136,17 +165,34 @@ def test_api_update_post(monkeypatch, created_post):
         "size": "1GB",
     }
 
+    called = {"update": False}
+
     def mock_update_post(db, pid, rutracker_id, link, title, seeds, leaches, size):
+        # Проверяем, что update_post вызывается с правильными аргументами
+        assert pid == post_id
+        assert isinstance(rutracker_id, str)
+        called["update"] = True
+        # Возвращаем что-то, но main.py после commit вызывает get_post_by_id,
+        # поэтому окончательный ответ будет от get_post_by_id
+        return SimpleNamespace(id=pid, **updated_data)
+
+    # Очень важно: mock get_post_by_id, потому что main.py вызывает его после commit
+    def mock_get_post_by_id(db, pid):
         assert pid == post_id
         return SimpleNamespace(id=pid, **updated_data)
 
     monkeypatch.setattr(models, "update_post", mock_update_post)
+    monkeypatch.setattr(models, "get_post_by_id", mock_get_post_by_id)
 
-    response = test_client.put(f"/posts/{post_id}", json=updated_data)
-    assert response.status_code == 200
-    resp_data = response.json()
-    for key, value in updated_data.items():
-        assert resp_data[key] == value
+    resp = test_client.put(f"/posts/{post_id}", json=updated_data)
+    assert resp.status_code == 200
+    resp_body = resp.json()
+
+    # Убедимся, что update действительно вызван (защита от "silent" ошибки)
+    assert called["update"] is True
+
+    for k, v in updated_data.items():
+        assert resp_body[k] == v
 
 
 # ---------------------------
@@ -155,13 +201,20 @@ def test_api_update_post(monkeypatch, created_post):
 def test_api_delete_post(monkeypatch, created_post):
     post_id, _, _ = created_post
 
+    called = {"deleted": False}
+
+    # main.py вызывает get_post_by_id перед удалением, поэтому мокируем его
+    monkeypatch.setattr(models, "get_post_by_id", lambda db, pid: SimpleNamespace(id=pid))
+
     def mock_delete_post(db, pid):
         assert pid == post_id
+        called["deleted"] = True
         return SimpleNamespace(id=pid)
 
     monkeypatch.setattr(models, "delete_post", mock_delete_post)
 
-    response = test_client.delete(f"/posts/{post_id}")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == post_id
+    resp = test_client.delete(f"/posts/{post_id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == post_id
+    assert called["deleted"] is True
