@@ -48,6 +48,9 @@ jobs:
           pip install pytest pytest-cov
 
       - name: Run tests with coverage
+        env:
+          SQLALCHEMY_DATABASE_URI: ${{ secrets.SQLALCHEMY_DATABASE_TEST_URI }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
         run: |
           PYTHONPATH=. pytest tests/ -v --disable-warnings --cov=app --cov-report=xml
 
