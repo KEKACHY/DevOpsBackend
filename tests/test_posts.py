@@ -24,7 +24,6 @@ class DummyExecuteResult:
         return list(self._rows)
 
     def scalar(self):
-        # Для get_post_id_by_rutracker_id
         return self._rows[0] if self._rows else None
 
 
@@ -51,7 +50,7 @@ class DummyDB:
         if "rutracker_posts" in sql:
             return DummyExecuteResult([42])
         if "create_posts" in sql:
-            return DummyExecuteResult([99])  # ID нового поста
+            return DummyExecuteResult([(99,)])
         return DummyExecuteResult()
 
 @pytest.fixture
