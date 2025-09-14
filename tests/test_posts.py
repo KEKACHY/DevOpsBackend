@@ -8,19 +8,25 @@ import requests
 
 test_client = TestClient(app)
 
-# ---------------------------
-# Мокаем get_db, чтобы эндпоинды не обращались к реальной БД
-# ---------------------------
-class DummyDB:
-    pass
 
+# ---------------------------
+# Фикстура для мокнутой БД
+# ---------------------------
 @pytest.fixture(autouse=True)
-def mock_db(monkeypatch):
-    # Подменяем функцию get_db на фиктивную, которая возвращает DummyDB
-    monkeypatch.setattr("app.main.get_db", lambda: iter([DummyDB()]))
+def override_get_db():
+    """
+    Подменяем зависимость get_db на фиктивную.
+    FastAPI ожидает генератор с yield.
+    """
+    def dummy_db():
+        yield SimpleNamespace()
+    app.dependency_overrides[models.get_db] = dummy_db
+    yield
+    app.dependency_overrides.clear()
+
 
 # ---------------------------
-# Создание поста
+# Фикстура для тестового поста
 # ---------------------------
 @pytest.fixture
 def created_post():
@@ -33,18 +39,23 @@ def created_post():
         "title": "Test Post",
         "seeds": 10,
         "leaches": 5,
-        "size": "700MB"
+        "size": "700MB",
     }
     return post_id, rutracker_id, post_data
 
+
 # ---------------------------
-# Тест отправки поста в Telegram
+# Тест: отправка поста в Telegram
 # ---------------------------
 def test_send_post(monkeypatch, created_post):
-    post_id, rutracker_id, post_data = created_post
+    post_id, _, post_data = created_post
 
-    # Мокаем функцию get_post_by_id
-    monkeypatch.setattr(models, "get_post_by_id", lambda db, pid: post_data)
+    # Мокаем get_post_by_id → возвращаем объект с атрибутами
+    monkeypatch.setattr(
+        models,
+        "get_post_by_id",
+        lambda db, pid: SimpleNamespace(**post_data),
+    )
 
     # Мокаем requests.post
     def mock_post(url, data=None, **kwargs):
@@ -57,17 +68,20 @@ def test_send_post(monkeypatch, created_post):
 
     response = test_client.post(f"/send-post/{post_id}")
     assert response.status_code == 200
+    assert response.json()["status"] == "sent"
+
 
 # ---------------------------
-# Тест получения всех постов
+# Тест: получение всех постов
 # ---------------------------
 def test_api_get_all_posts(monkeypatch, created_post):
-    post_id, rutracker_id, post_data = created_post
+    post_id, _, post_data = created_post
 
-    def mock_get_all_posts(db):
-        return [post_data]  # словарь, чтобы JSON сериализовался
-
-    monkeypatch.setattr(models, "get_all_posts", mock_get_all_posts)
+    monkeypatch.setattr(
+        models,
+        "get_all_posts",
+        lambda db: [SimpleNamespace(**post_data)],
+    )
 
     response = test_client.get("/posts/")
     assert response.status_code == 200
@@ -76,15 +90,16 @@ def test_api_get_all_posts(monkeypatch, created_post):
     assert len(posts) == 1
     assert posts[0]["id"] == post_id
 
+
 # ---------------------------
-# Тест получения поста по ID
+# Тест: получение поста по ID
 # ---------------------------
 def test_api_get_post_by_id(monkeypatch, created_post):
     post_id, rutracker_id, post_data = created_post
 
     def mock_get_post_by_id(db, pid):
         assert pid == post_id
-        return post_data  # словарь
+        return SimpleNamespace(**post_data)
 
     monkeypatch.setattr(models, "get_post_by_id", mock_get_post_by_id)
 
@@ -94,29 +109,26 @@ def test_api_get_post_by_id(monkeypatch, created_post):
     assert data["id"] == post_id
     assert data["rutracker_id"] == rutracker_id
 
+
 # ---------------------------
-# Тест обновления поста
+# Тест: обновление поста
 # ---------------------------
 def test_api_update_post(monkeypatch, created_post):
-    post_id, rutracker_id, post_data = created_post
+    post_id, _, _ = created_post
     updated_data = {
         "rutracker_id": f"updated-{uuid.uuid4()}",
         "link": "http://example.com/updated",
         "title": "Updated Post",
         "seeds": 20,
         "leaches": 10,
-        "size": "1GB"
+        "size": "1GB",
     }
 
-    # Мокаем update_post, возвращаем словарь для JSON
     def mock_update_post(db, pid, rutracker_id, link, title, seeds, leaches, size):
         assert pid == post_id
-        return {"id": pid, **updated_data}
+        return SimpleNamespace(id=pid, **updated_data)
 
     monkeypatch.setattr(models, "update_post", mock_update_post)
-
-    # Мокаем get_db, чтобы эндпоинд не обращался к БД
-    monkeypatch.setattr("app.main.get_db", lambda: iter([SimpleNamespace()]))
 
     response = test_client.put(f"/posts/{post_id}", json=updated_data)
     assert response.status_code == 200
@@ -126,21 +138,18 @@ def test_api_update_post(monkeypatch, created_post):
     assert resp_data["seeds"] == updated_data["seeds"]
     assert resp_data["leaches"] == updated_data["leaches"]
 
+
 # ---------------------------
-# Тест удаления поста
+# Тест: удаление поста
 # ---------------------------
 def test_api_delete_post(monkeypatch, created_post):
-    post_id, rutracker_id, post_data = created_post
+    post_id, _, _ = created_post
 
-    # Мокаем delete_post, возвращаем словарь для JSON
     def mock_delete_post(db, pid):
         assert pid == post_id
-        return {"id": pid}
+        return SimpleNamespace(id=pid)
 
     monkeypatch.setattr(models, "delete_post", mock_delete_post)
-
-    # Мокаем get_db
-    monkeypatch.setattr("app.main.get_db", lambda: iter([SimpleNamespace()]))
 
     response = test_client.delete(f"/posts/{post_id}")
     assert response.status_code == 200
