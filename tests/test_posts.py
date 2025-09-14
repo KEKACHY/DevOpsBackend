@@ -3,7 +3,8 @@ import uuid
 from fastapi.testclient import TestClient
 from app.main import app
 from app import models
-import requests  # <- импортируем requests
+import requests 
+from types import SimpleNamespace
 
 test_client = TestClient(app)
 
@@ -36,20 +37,19 @@ def created_post():
 def test_send_post(monkeypatch, db_session, created_post):
     post_id, rutracker_id, post_data = created_post
 
-    # Мокаем функцию get_post_by_id из models.py
     def mock_get_post_by_id(db, post_id):
-        return post_data
+        return SimpleNamespace(**post_data)  
 
     monkeypatch.setattr(models, "get_post_by_id", mock_get_post_by_id)
 
-    # Мокаем requests.post
     def mock_post(url, data=None, **kwargs):
         class MockResponse:
             status_code = 200
             def raise_for_status(self): pass
         return MockResponse()
 
-    monkeypatch.setattr(requests, "post", mock_post)  # <- передаём модуль requests
+    import requests
+    monkeypatch.setattr(requests, "post", mock_post)
 
     response = test_client.post(f"/send-post/{post_id}")
     assert response.status_code == 200
