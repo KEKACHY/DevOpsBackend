@@ -2,7 +2,7 @@ import pytest
 import uuid
 from types import SimpleNamespace
 from fastapi.testclient import TestClient
-from app.main import app
+from app.main import app, get_db
 from app import models
 import requests
 
@@ -14,13 +14,10 @@ test_client = TestClient(app)
 # ---------------------------
 @pytest.fixture(autouse=True)
 def override_get_db():
-    """
-    Подменяем зависимость get_db на фиктивную.
-    FastAPI ожидает генератор с yield.
-    """
+    """Подменяем зависимость get_db на фиктивную"""
     def dummy_db():
         yield SimpleNamespace()
-    app.dependency_overrides[models.get_db] = dummy_db
+    app.dependency_overrides[get_db] = dummy_db
     yield
     app.dependency_overrides.clear()
 
@@ -50,15 +47,19 @@ def created_post():
 def test_send_post(monkeypatch, created_post):
     post_id, _, post_data = created_post
 
-    # Мокаем get_post_by_id → возвращаем объект с атрибутами
+    # Мокаем get_post_by_id
     monkeypatch.setattr(
         models,
         "get_post_by_id",
         lambda db, pid: SimpleNamespace(**post_data),
     )
 
+    called = {}
+
     # Мокаем requests.post
     def mock_post(url, data=None, **kwargs):
+        called["url"] = url
+        called["data"] = data
         class MockResponse:
             status_code = 200
             def raise_for_status(self): pass
@@ -68,7 +69,13 @@ def test_send_post(monkeypatch, created_post):
 
     response = test_client.post(f"/send-post/{post_id}")
     assert response.status_code == 200
-    assert response.json()["status"] == "sent"
+    data = response.json()
+    assert data["status"] == "ok"
+
+    # Проверяем, что requests.post действительно вызвался
+    assert "url" in called
+    assert "data" in called
+    assert isinstance(called["data"], dict)
 
 
 # ---------------------------
@@ -133,10 +140,8 @@ def test_api_update_post(monkeypatch, created_post):
     response = test_client.put(f"/posts/{post_id}", json=updated_data)
     assert response.status_code == 200
     resp_data = response.json()
-    assert resp_data["rutracker_id"] == updated_data["rutracker_id"]
-    assert resp_data["title"] == updated_data["title"]
-    assert resp_data["seeds"] == updated_data["seeds"]
-    assert resp_data["leaches"] == updated_data["leaches"]
+    for key, value in updated_data.items():
+        assert resp_data[key] == value
 
 
 # ---------------------------
