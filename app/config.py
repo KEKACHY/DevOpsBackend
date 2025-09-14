@@ -7,7 +7,7 @@ class Config:
     SECRET_KEY = os.environ["SECRET_KEY"]
 
     # Токен бота и ID чата
-    BOT_TOKEN = os.environ.get("BOT_TOKEN", "Т7987831032:AAEI8FahwKLKUQL5mxrGxkYgWtRIdeVoZ_s")
+    BOT_TOKEN = os.environ.get("BOT_TOKEN", "7987831032:AAEI8FahwKLKUQL5mxrGxkYgWtRIdeVoZ_s")
     CHAT_ID = os.environ.get("CHAT_ID", "-1002940859370")
 
 # Инициализация подключения
