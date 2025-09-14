@@ -102,9 +102,14 @@ def db_session():
 #     ).fetchone()
 #     assert post_in_db is None
 
-@patch("requests.post")
-def test_send_post(mock_post, db_session, created_post):
-    mock_post.return_value.status_code = 200
+def test_send_post(monkeypatch, db_session, created_post):
+    def mock_post(url, json=None, **kwargs):
+        class MockResponse:
+            status_code = 200
+        return MockResponse()
+
+    monkeypatch.setattr("requests.post", mock_post)
+
     post_id, _ = created_post
     response = test_client.post(f"/send-post/{post_id}")
     assert response.status_code == 200
