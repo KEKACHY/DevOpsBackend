@@ -32,9 +32,17 @@ class DummyDB:
     def __init__(self):
         self.executed = []
 
+    def commit(self):
+        return None
+
+    def refresh(self, obj):
+        return None
+
+    def delete(self, obj):
+        return None
+
     def execute(self, stmt, params=None):
         self.executed.append((stmt, params))
-        # Возвращаем разные типы в зависимости от запроса
         sql = str(stmt)
         if "get_all_posts()" in sql:
             return DummyExecuteResult([{"id": 1, "title": "Post1"}])
@@ -43,7 +51,7 @@ class DummyDB:
         if "rutracker_posts" in sql:
             return DummyExecuteResult([42])
         if "create_posts" in sql:
-            return DummyExecuteResult([99])  # вернём ID нового поста
+            return DummyExecuteResult([99])  # ID нового поста
         return DummyExecuteResult()
 
 @pytest.fixture
