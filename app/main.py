@@ -6,8 +6,11 @@ from typing import List
 from .config import SessionLocal
 from fastapi.middleware.cors import CORSMiddleware
 import requests
+from .config import Config
 
 app = FastAPI()
+BOT_TOKEN = Config.BOT_TOKEN
+CHAT_ID = Config.CHAT_ID
 
 # Разрешаем все origins (для разработки)
 app.add_middleware(
@@ -35,9 +38,6 @@ class RutrackerPostResponse(RutrackerPostCreate):
 
 class PostDeleteResponse(BaseModel):
     id: int
-
-BOT_TOKEN = "Т7987831032:AAEI8FahwKLKUQL5mxrGxkYgWtRIdeVoZ_s"
-CHAT_ID = "-1002940859370"
 
 # Функция для получения сессии БД
 def get_db():

@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.config import engine, SessionLocal
 from sqlalchemy import text
+from unittest.mock import patch
+
 
 test_client = TestClient(app)
 
@@ -100,3 +102,11 @@ def test_api_delete_post(db_session, created_post):
     ).fetchone()
     assert post_in_db is None
 
+@patch("requests.post")
+def test_send_post(mock_post, db_session, created_post):
+    mock_post.return_value.status_code = 200
+    post_id, _ = created_post
+    response = test_client.post(f"/send-post/{post_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
